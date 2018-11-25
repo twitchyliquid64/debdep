@@ -1,6 +1,7 @@
 package debdep
 
 import (
+	"os"
 	"testing"
 
 	"github.com/twitchyliquid64/debdep/deb"
@@ -149,6 +150,26 @@ func TestInstallGraphDeepNested(t *testing.T) {
 	if sub[1].Kind != DebPackageInstallOp || sub[1].Package != "yolo" || sub[1].Version.String() != "1" {
 		t.Errorf("Third package-dep incorrect, got %+v", sub[1])
 	}
+}
+
+func TestInstallGraphLoop(t *testing.T) {
+	pkgInfo := &PackageInfo{
+		BinaryPackages: true,
+		Packages: map[string]map[version.Version]*deb.Paragraph{
+			"base": makePkg(t, "base", []string{"1.3.2", "1.9.2"}, "kek"),
+			"kek":  makePkg(t, "kek", []string{"1.3.2"}, "meep"),
+			"meep": makePkg(t, "meep", []string{"1.3.2"}, "kek"),
+		},
+	}
+
+	graph, err := pkgInfo.InstallGraph("base", nil)
+	if err != nil {
+		t.Fatalf("InstallGraph() returned err: %v", err)
+	}
+	if graph == nil {
+		t.Fatalf("InstallGraph() returned nil")
+	}
+	graph.PrettyWrite(os.Stdout, 1)
 }
 
 func TestInstallGraphUnsatisfiedMissing(t *testing.T) {

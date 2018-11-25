@@ -69,6 +69,39 @@ type Requirement struct {
 	VersionConstraint *VersionConstraint
 }
 
+func (r *Requirement) Equal(b *Requirement) bool {
+	if r.Kind != b.Kind {
+		return false
+	}
+	if r.Kind == PackageRelationRequirement {
+		if r.Package != b.Package {
+			return false
+		}
+		hasVers := r.VersionConstraint != nil
+		if hasVers != (b.VersionConstraint != nil) {
+			return false
+		}
+		if hasVers {
+			if r.VersionConstraint.ConstraintRelation != b.VersionConstraint.ConstraintRelation {
+				return false
+			}
+			if r.VersionConstraint.Version != b.VersionConstraint.Version {
+				return false
+			}
+		}
+	} else {
+		if len(r.Children) != len(b.Children) {
+			return false
+		}
+		for i, _ := range r.Children {
+			if !r.Children[i].Equal(&b.Children[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // ConstraintRelation describes the kind of operation
 // by which a package version is constrained.
 type ConstraintRelation string

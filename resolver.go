@@ -79,11 +79,11 @@ func (o *Operation) PrettyWrite(w io.Writer, depth int) error {
 }
 
 func (p *PackageInfo) InstallGraph(target string, installed *PackageInfo) (*Operation, error) {
-	coveredDeps := make(map[string]*Operation)
-	return p.buildInstallGraph(target, coveredDeps, installed)
+	var coveredDeps []deb.Requirement
+	return p.buildInstallGraph(target, &coveredDeps, installed)
 }
 
-func (p *PackageInfo) buildInstallGraph(target string, coveredDeps map[string]*Operation, installed *PackageInfo) (*Operation, error) {
+func (p *PackageInfo) buildInstallGraph(target string, coveredDeps *[]deb.Requirement, installed *PackageInfo) (*Operation, error) {
 	pkg, err := p.FindLatest(target)
 	if err != nil {
 		return nil, err
@@ -114,12 +114,16 @@ func (p *PackageInfo) buildInstallGraph(target string, coveredDeps map[string]*O
 	}, nil
 }
 
-func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps map[string]*Operation, installed *PackageInfo, req deb.Requirement, parent deb.Requirement) (out *Operation, err error) {
+func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *[]deb.Requirement, installed *PackageInfo, req deb.Requirement, parent deb.Requirement) (out *Operation, err error) {
 	defer func() {
 		if err == nil && out.Kind == CompositeDependencyOp && len(out.DependentOperations) == 1 {
 			out = out.DependentOperations[0]
 		}
 	}()
+
+	if checkSetCoveredDependency(coveredDeps, req) {
+		return &Operation{Kind: CompositeDependencyOp}, nil
+	}
 
 	switch req.Kind {
 	case deb.AndCompositeRequirement:
@@ -174,6 +178,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps map[string]*Opera
 		if err != nil {
 			return nil, err
 		}
+
 		nextOps, err := p.buildInstallGraphRequirement(coveredDeps, installed, nextDeps, req)
 		if err != nil {
 			return nil, err
@@ -303,4 +308,15 @@ func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.V
 	}
 
 	return nil, os.ErrNotExist
+}
+
+func checkSetCoveredDependency(coveredDeps *[]deb.Requirement, req deb.Requirement) bool {
+	for _, covered := range *coveredDeps {
+		if covered.Equal(&req) {
+			return true
+		}
+	}
+	t := append(*coveredDeps, req)
+	*coveredDeps = t
+	return false
 }
