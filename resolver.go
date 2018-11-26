@@ -158,17 +158,24 @@ func (p *PackageInfo) buildInstallGraph(target string, coveredDeps *coveredDeps,
 
 func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, installed *PackageInfo, req deb.Requirement, parent deb.Requirement, isPreDep bool) (out *Operation, err error) {
 	defer func() {
+		// To neaten the AST a little, if we are returning a composite node
+		// containing a single node, we delete the composite and just return
+		// the contained base node.
 		if err == nil && out.Kind == CompositeDependencyOp && len(out.DependentOperations) == 1 {
 			out = out.DependentOperations[0]
 		}
 	}()
 
 	if checkSetCoveredDependency(coveredDeps, req) {
+		// If this requirement has already been satisfied verbatium, we
+		// return early (An empty CompositeDependencyOp symbolizes a no-op).
 		return &Operation{Kind: CompositeDependencyOp}, nil
 	}
 
 	switch req.Kind {
 	case deb.AndCompositeRequirement:
+		// Handle a composite where all contained requirements must be satisfied.
+		// We simply recurse to allow their dependencies to lead in the graph.
 		var ops []*Operation
 		for _, dep := range req.Children {
 			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, dep, req, isPreDep)
@@ -183,8 +190,10 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 		}, nil
 
 	case deb.PackageRelationRequirement:
+		// Handle a requirement for a single package, which
+		// may be constrained by a version relationship.
 		var selected *deb.Paragraph
-		if req.VersionConstraint == nil {
+		if req.VersionConstraint == nil { // No version relationship, lets use the latest.
 			latest, err := p.FindLatest(req.Package)
 			if err != nil {
 				if err == os.ErrNotExist {
@@ -216,11 +225,13 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 			return nil, err
 		}
 
+		// Another short-circuit: if we already have installed this package+version,
+		// we bail out by returning a structure symbolizing a no-op.
 		if checkSetCoveredPackage(coveredDeps, selected.Name(), v.String()) {
 			return &Operation{Kind: CompositeDependencyOp}, nil
 		}
 
-		// Apply pre-depends, and mark them as such.
+		// Fetch the Pre-Depends packages and compute that sub-graph by recursing.
 		preDeps, err := selected.BinaryPreDepends()
 		if err != nil {
 			return nil, err
@@ -233,55 +244,54 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 			}
 		}
 
+		// Fetch the Depends packages and compute that sub-graph by recursing.
 		nextDeps, err := selected.BinaryDepends()
 		if err != nil {
 			return nil, err
 		}
-
 		nextOps, err := p.buildInstallGraphRequirement(coveredDeps, installed, nextDeps, req, false)
 		if err != nil {
 			return nil, err
 		}
 
+		pkgOp := &Operation{
+			Kind:    DebPackageInstallOp,
+			Package: selected.Name(),
+			Version: v,
+			PreDep:  isPreDep,
+		}
+
 		if nextOps.Kind == CompositeDependencyOp && len(nextOps.DependentOperations) == 0 && preOps == nil {
-			return &Operation{
-				Kind:    DebPackageInstallOp,
-				Package: selected.Name(),
-				Version: v,
-				PreDep:  isPreDep,
-			}, nil
+			// No Dependencies or Predependencies. Just return the package + version.
+			return pkgOp, nil
 		} else {
 			if preOps == nil {
+				// No Pre-Depends, but there were depends. Return a composite of the dependencies,
+				// with the package+version trailing that.
 				return &Operation{
 					Kind: CompositeDependencyOp,
 					DependentOperations: []*Operation{
 						nextOps,
-						{
-							Kind:    DebPackageInstallOp,
-							Package: selected.Name(),
-							Version: v,
-							PreDep:  isPreDep,
-						},
+						pkgOp,
 					},
 				}, nil
 			} else {
+				// There were Pre-Depends + Depends. Return a composite with the Pre-Depends
+				// first (marked as such), next the Depends, and finally the mentioned Package.
 				return &Operation{
 					Kind: CompositeDependencyOp,
 					DependentOperations: []*Operation{
 						preOps,
 						nextOps,
-						{
-							Kind:    DebPackageInstallOp,
-							Package: selected.Name(),
-							Version: v,
-							PreDep:  isPreDep,
-						},
+						pkgOp,
 					},
 				}, nil
 			}
 		}
 
 	case deb.OrCompositeRequirement:
+		// Handle requirements where only one of several need to be satisfied.
+		// We select the first one from the list which can be satisfied.
 		for _, candidateDep := range req.Children {
 			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, candidateDep, req, isPreDep)
 			if err != nil {
@@ -300,7 +310,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 	return nil, nil
 }
 
-// FindAll returns all packages with a given name, by version.
+// FindAll returns all packages with a given name, indexed by version.
 func (p *PackageInfo) FindAll(target string) (map[version.Version]*deb.Paragraph, error) {
 	pkgs, ok := p.Packages[target]
 	if !ok {
@@ -400,6 +410,8 @@ func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.V
 	return nil, os.ErrNotExist
 }
 
+// checkSetCoveredDependency returns true if that requirement has already been satisfied.
+// If the requirement has not been satisfied, it is added to coveredDeps.
 func checkSetCoveredDependency(coveredDeps *coveredDeps, req deb.Requirement) bool {
 	for _, covered := range coveredDeps.Requirements {
 		if covered.Equal(&req) {
@@ -410,6 +422,9 @@ func checkSetCoveredDependency(coveredDeps *coveredDeps, req deb.Requirement) bo
 	return false
 }
 
+// checkSetCoveredPackage returns true if that package+version has already been
+// satisfied in the install graph.
+// If the requirement has not been satisfied, it is added to coveredDeps.
 func checkSetCoveredPackage(coveredDeps *coveredDeps, pkg, version string) bool {
 	for _, covered := range coveredDeps.Packages {
 		if covered.Name == pkg && covered.Version == version {
