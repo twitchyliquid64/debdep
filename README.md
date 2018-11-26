@@ -21,36 +21,38 @@ See the main package `debdep`.
 
 ./debdep calculate-deps screen
 
-Read 55937 packages.
+Read 55944 packages.
  composite:
   composite:
    composite:
     composite:
      composite:
-      package-dep: gcc-8-base (8.2.0-9)
-      package-dep: libc6 (2.27-8)
-     package-dep: libgcc1 (1:8.2.0-9)
-    package-dep: libc6 (2.27-8)
+      composite:
+       package-dep: [ ] gcc-8-base (8.2.0-9)
+       composite:
+      package-dep: [ ] libgcc1 (1:8.2.0-9)
+     package-dep: [ ] libc6 (2.27-8)
+    package-dep: [*] libbz2-1.0 (1.0.6-9)
+   composite:
+   package-dep: [*] liblzma5 (5.2.2-1.3)
    composite:
     composite:
      composite:
-      composite:
-       package-dep: libaudit-common (1:2.8.4-2)
-       composite:
-       composite:
-        package-dep: libc6 (2.27-8)
-        package-dep: libcap-ng0 (0.7.9-1)
-      package-dep: libaudit1 (1:2.8.4-2)
+     package-dep: [ ] libpcre3 (2:8.39-11)
+    package-dep: [*] libselinux1 (2.8-1+b1)
+   package-dep: [*] zlib1g (1:1.2.11.dfsg-1)
+  composite:
+   composite:
+    composite:
      composite:
-     package-dep: debconf (1.5.69)
-    package-dep: libpam0g (1.1.8-3.8)
+      package-dep: [ ] libattr1 (1:2.4.47-2+b2)
+      composite:
+     package-dep: [*] libacl1 (2.2.52-3+b1)
+    composite:
+    composite:
    composite:
-    package-dep: libc6 (2.27-8)
-    package-dep: libtinfo6 (6.1+20181013-1)
-   composite:
-    package-dep: libc6 (2.27-8)
-    package-dep: libutempter0 (1.1.6-3)
-  package-dep: screen (4.6.2-3)
+   package-dep: [ ] tar (1.30+dfsg-3)
+  package-dep: [ ] dpkg (1.19.2)
 ```
 
 *bootstrap-sequence* sub-command:
@@ -59,23 +61,34 @@ Read 55937 packages.
 
 ./debdep bootstrap-sequence screen
 
-# Read 55937 packages.
-000 gcc-8-base 8.2.0-9
-001 libc6 2.27-8
-002 libgcc1 1:8.2.0-9
-003 libc6 2.27-8
-004 libaudit-common 1:2.8.4-2
-005 libc6 2.27-8
-006 libcap-ng0 0.7.9-1
-007 libaudit1 1:2.8.4-2
-008 debconf 1.5.69
-009 libpam0g 1.1.8-3.8
-010 libc6 2.27-8
-011 libtinfo6 6.1+20181013-1
-012 libc6 2.27-8
-013 libutempter0 1.1.6-3
-014 screen 4.6.2-3
+# Read 55944 packages.
+000 [ ] gcc-8-base 8.2.0-9
+001 [ ] libgcc1 1:8.2.0-9
+002 [ ] libc6 2.27-8
+003 [ ] libaudit-common 1:2.8.4-2
+004 [ ] libcap-ng0 0.7.9-1
+005 [ ] libaudit1 1:2.8.4-2
+006 [*] libbz2-1.0 1.0.6-9
+007 [*] liblzma5 5.2.2-1.3
+008 [ ] libpcre3 2:8.39-11
+009 [*] libselinux1 2.8-1+b1
+010 [*] zlib1g 1:1.2.11.dfsg-1
+011 [ ] libattr1 1:2.4.47-2+b2
+012 [*] libacl1 2.2.52-3+b1
+013 [ ] tar 1.30+dfsg-3
+014 [*] dpkg 1.19.2
+015 [*] perl-base 5.28.0-4
+016 [ ] debconf 1.5.69
+017 [ ] libpam0g 1.1.8-3.8
+018 [ ] libtinfo6 6.1+20181013-1
+019 [ ] libutempter0 1.1.6-3
+020 [ ] screen 4.6.2-3
+
 ```
+
+The asterisks symbolize pre-dependencies. These can be thought of as install 'barriers', which must be fully
+installed before subsequent packages can begin to be installed.
+
 
 ### In Go:
 
@@ -115,9 +128,10 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
 
 ## Known issues
 
- * If the sub-dependency chains up to a dependency that is already in the resolved install graph, but with a different set of requirements, it will be duplicated.
+ * Wierd behaviour with circular dependencies - not certain the resolver is producing the correct order in this case.
 
 ## TODO
+
  * Fix known issues.
  * Support for source packages.
  * Support for multi-arch.
