@@ -1,7 +1,6 @@
 package debdep
 
 import (
-	"os"
 	"testing"
 
 	"github.com/twitchyliquid64/debdep/deb"
@@ -169,7 +168,47 @@ func TestInstallGraphLoop(t *testing.T) {
 	if graph == nil {
 		t.Fatalf("InstallGraph() returned nil")
 	}
-	graph.PrettyWrite(os.Stdout, 1)
+	// graph.PrettyWrite(os.Stdout, 1)
+
+	if graph.DependentOperations[0].DependentOperations[0].Package != "meep" {
+		t.Error("Expected first pkg to be meep")
+	}
+	if graph.DependentOperations[0].DependentOperations[1].Package != "kek" {
+		t.Error("Expected second pkg to be kek")
+	}
+	if graph.DependentOperations[1].Package != "base" {
+		t.Error("Expected third pkg to be base")
+	}
+}
+
+func TestInstallGraphOrRequirements(t *testing.T) {
+	pkgInfo := &PackageInfo{
+		BinaryPackages: true,
+		Packages: map[string]map[version.Version]*deb.Paragraph{
+			"base": makePkg(t, "base", []string{"1.3.2", "1.9.2"}, "kek (>> 2.0.0) | meep"),
+			"kek":  makePkg(t, "kek", []string{"1.3.2"}, ""),
+			"meep": makePkg(t, "meep", []string{"1.3.2"}, ""),
+		},
+	}
+
+	graph, err := pkgInfo.InstallGraph("base", nil)
+	if err != nil {
+		t.Fatalf("InstallGraph() returned err: %v", err)
+	}
+	if graph == nil {
+		t.Fatalf("InstallGraph() returned nil")
+	}
+	//graph.PrettyWrite(os.Stdout, 1)
+
+	if graph.Kind != CompositeDependencyOp && len(graph.DependentOperations) != 2 {
+		t.Fatalf("Expected root to be Composite with 2 children, got Kind=%v & len(children) = %d", graph.Kind, len(graph.DependentOperations))
+	}
+	if graph.DependentOperations[0].Kind != DebPackageInstallOp || graph.DependentOperations[0].Package != "meep" || graph.DependentOperations[0].Version.String() != "1.3.2" {
+		t.Errorf("First package-dep incorrect, got %+v", graph.DependentOperations[0])
+	}
+	if graph.DependentOperations[1].Kind != DebPackageInstallOp || graph.DependentOperations[1].Package != "base" || graph.DependentOperations[1].Version.String() != "1.9.2" {
+		t.Errorf("Second package-dep incorrect, got %+v", graph.DependentOperations[1])
+	}
 }
 
 func TestInstallGraphUnsatisfiedMissing(t *testing.T) {

@@ -121,6 +121,23 @@ func TestParseDependsSimpleVersions(t *testing.T) {
 	}
 }
 
+func TestParseDependsSimpleOrWithVersion(t *testing.T) {
+	spec, err := ParsePackageRelations("libamd2 (>= 1:4.5.2) | libc6")
+	if err != nil {
+		t.Fatalf("ParsePackageRelations() returned err: %v", err)
+	}
+
+	if spec.Kind != OrCompositeRequirement || len(spec.Children) != 2 {
+		t.Fatalf("Expected 2 children on OR root, got %v with len = %d", spec.Kind, len(spec.Children))
+	}
+	if spec.Children[0].VersionConstraint == nil || spec.Children[0].VersionConstraint.Version != "1:4.5.2" || spec.Children[0].VersionConstraint.ConstraintRelation != ConstraintGreaterEquals {
+		t.Errorf("First version constraint incorrect: %v", spec.Children[0].VersionConstraint)
+	}
+	if spec.Children[1].VersionConstraint != nil || spec.Children[1].Package != "libc6" {
+		t.Errorf("Second version constraint incorrect: %v", spec.Children[1].VersionConstraint)
+	}
+}
+
 func TestParseDependsSimpleVersions2(t *testing.T) {
 	spec, err := ParsePackageRelations("kek (<< 1.7), meep (= 1.3.2)")
 	if err != nil {

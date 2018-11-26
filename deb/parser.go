@@ -149,7 +149,7 @@ func parseRelation(r *bufio.Reader) (string, *VersionConstraint, error) {
 // parseRelationSpec parses a group (between commas) of relation constraints.
 func parseRelationSpec(r *bufio.Reader) (out Requirement, err error) {
 	defer func() {
-		if len(out.Children) == 1 && out.Kind == AndCompositeRequirement {
+		if len(out.Children) == 1 && (out.Kind == AndCompositeRequirement || out.Kind == OrCompositeRequirement) {
 			out = out.Children[0]
 		}
 	}()
@@ -169,6 +169,7 @@ func parseRelationSpec(r *bufio.Reader) (out Requirement, err error) {
 			spec.VersionConstraint = versionConst
 		}
 
+		consumeWhitespace(r)
 		next, _, err := r.ReadRune()
 		if err != nil && err != io.EOF {
 			return out, err
@@ -205,9 +206,15 @@ func parseRelationSpec(r *bufio.Reader) (out Requirement, err error) {
 
 // ParsePackageRelations takes a string of package/version contraints, and parses
 // them into a tree of Requirement structures.
-func ParsePackageRelations(in string) (Requirement, error) {
+func ParsePackageRelations(in string) (out Requirement, err error) {
+	defer func() {
+		if (out.Kind == AndCompositeRequirement || out.Kind == OrCompositeRequirement) && len(out.Children) == 1 {
+			out = out.Children[0]
+		}
+	}()
+
 	r := bufio.NewReader(strings.NewReader(in))
-	out := Requirement{
+	out = Requirement{
 		Kind: AndCompositeRequirement,
 	}
 

@@ -1,6 +1,7 @@
 package debdep
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -203,6 +204,19 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *[]deb.Requiremen
 				},
 			}, nil
 		}
+
+	case deb.OrCompositeRequirement:
+		for _, candidateDep := range req.Children {
+			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, candidateDep, req)
+			if err != nil {
+				if _, wasDep := err.(ErrDependency); wasDep {
+					continue
+				}
+				return nil, err
+			}
+			return op, nil
+		}
+		return nil, errors.New("no package meeting any requirement available")
 
 	default:
 		return nil, fmt.Errorf("cannot process requirement type %d", req.Kind)
