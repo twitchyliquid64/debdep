@@ -101,7 +101,7 @@ if err != nil {
 fmt.Printf("Read %d packages.\n", len(pkgs.Packages))
 ```
 
-Compute an install graph (assuming no packages installed)
+Compute an install graph (assuming no packages installed) for the package *screen*
 
 ```go
 
@@ -119,4 +119,5 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
 
 ## TODO
  * Fix known issues.
+ * Support for source packages.
  * Support specifying which packages are already installed.
