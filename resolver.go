@@ -58,6 +58,7 @@ type Operation struct {
 
 	Package string
 	Version version.Version
+	PreDep  bool
 }
 
 func (o *Operation) PrettyWrite(w io.Writer, depth int) error {
@@ -73,18 +74,47 @@ func (o *Operation) PrettyWrite(w io.Writer, depth int) error {
 			dep.PrettyWrite(w, depth+1)
 		}
 	case DebPackageInstallOp:
+		w.Write([]byte("["))
+		if o.PreDep {
+			w.Write([]byte("*"))
+		} else {
+			w.Write([]byte(" "))
+		}
+		w.Write([]byte("] "))
 		w.Write([]byte(o.Package + " (" + o.Version.String() + ")\n"))
 	}
 
 	return nil
 }
 
+func (o *Operation) Unroll() []Operation {
+	var out []Operation
+	switch o.Kind {
+	case DebPackageInstallOp:
+		out = append(out, *o)
+	case CompositeDependencyOp:
+		for _, c := range o.DependentOperations {
+			out = append(out, c.Unroll()...)
+		}
+	}
+
+	return out
+}
+
+type coveredDeps struct {
+	Requirements []deb.Requirement
+	Packages     []struct {
+		Name    string
+		Version string
+	}
+}
+
 func (p *PackageInfo) InstallGraph(target string, installed *PackageInfo) (*Operation, error) {
-	var coveredDeps []deb.Requirement
+	var coveredDeps coveredDeps
 	return p.buildInstallGraph(target, &coveredDeps, installed)
 }
 
-func (p *PackageInfo) buildInstallGraph(target string, coveredDeps *[]deb.Requirement, installed *PackageInfo) (*Operation, error) {
+func (p *PackageInfo) buildInstallGraph(target string, coveredDeps *coveredDeps, installed *PackageInfo) (*Operation, error) {
 	pkg, err := p.FindLatest(target)
 	if err != nil {
 		return nil, err
@@ -93,29 +123,40 @@ func (p *PackageInfo) buildInstallGraph(target string, coveredDeps *[]deb.Requir
 	if err != nil {
 		return nil, err
 	}
+
+	out := &Operation{Kind: CompositeDependencyOp}
+
+	// Apply pre-depends, and mark them as such.
+	preDeps, err := pkg.BinaryPreDepends()
+	if err != nil {
+		return nil, err
+	}
+	if preDeps.Kind != deb.AndCompositeRequirement || len(preDeps.Children) > 0 {
+		op, err := p.buildInstallGraphRequirement(coveredDeps, installed, preDeps, deb.Requirement{}, true)
+		if err != nil {
+			return nil, err
+		}
+		out.DependentOperations = append(out.DependentOperations, op)
+	}
+
 	deps, err := pkg.BinaryDepends()
 	if err != nil {
 		return nil, err
 	}
-
-	op, err := p.buildInstallGraphRequirement(coveredDeps, installed, deps, deb.Requirement{})
+	op, err := p.buildInstallGraphRequirement(coveredDeps, installed, deps, deb.Requirement{}, false)
 	if err != nil {
 		return nil, err
 	}
-	return &Operation{
-		Kind: CompositeDependencyOp,
-		DependentOperations: []*Operation{
-			op,
-			&Operation{
-				Kind:    DebPackageInstallOp,
-				Package: pkg.Name(),
-				Version: vers,
-			},
-		},
-	}, nil
+	out.DependentOperations = append(out.DependentOperations, op)
+	out.DependentOperations = append(out.DependentOperations, &Operation{
+		Kind:    DebPackageInstallOp,
+		Package: pkg.Name(),
+		Version: vers,
+	})
+	return out, nil
 }
 
-func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *[]deb.Requirement, installed *PackageInfo, req deb.Requirement, parent deb.Requirement) (out *Operation, err error) {
+func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, installed *PackageInfo, req deb.Requirement, parent deb.Requirement, isPreDep bool) (out *Operation, err error) {
 	defer func() {
 		if err == nil && out.Kind == CompositeDependencyOp && len(out.DependentOperations) == 1 {
 			out = out.DependentOperations[0]
@@ -130,7 +171,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *[]deb.Requiremen
 	case deb.AndCompositeRequirement:
 		var ops []*Operation
 		for _, dep := range req.Children {
-			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, dep, req)
+			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, dep, req, isPreDep)
 			if err != nil {
 				return nil, err
 			}
@@ -175,39 +216,74 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *[]deb.Requiremen
 			return nil, err
 		}
 
+		if checkSetCoveredPackage(coveredDeps, selected.Name(), v.String()) {
+			return &Operation{Kind: CompositeDependencyOp}, nil
+		}
+
+		// Apply pre-depends, and mark them as such.
+		preDeps, err := selected.BinaryPreDepends()
+		if err != nil {
+			return nil, err
+		}
+		var preOps *Operation
+		if preDeps.Kind != deb.AndCompositeRequirement || len(preDeps.Children) > 0 {
+			preOps, err = p.buildInstallGraphRequirement(coveredDeps, installed, preDeps, req, true)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		nextDeps, err := selected.BinaryDepends()
 		if err != nil {
 			return nil, err
 		}
 
-		nextOps, err := p.buildInstallGraphRequirement(coveredDeps, installed, nextDeps, req)
+		nextOps, err := p.buildInstallGraphRequirement(coveredDeps, installed, nextDeps, req, false)
 		if err != nil {
 			return nil, err
 		}
 
-		if nextOps.Kind == CompositeDependencyOp && len(nextOps.DependentOperations) == 0 {
+		if nextOps.Kind == CompositeDependencyOp && len(nextOps.DependentOperations) == 0 && preOps == nil {
 			return &Operation{
 				Kind:    DebPackageInstallOp,
 				Package: selected.Name(),
 				Version: v,
+				PreDep:  isPreDep,
 			}, nil
 		} else {
-			return &Operation{
-				Kind: CompositeDependencyOp,
-				DependentOperations: []*Operation{
-					nextOps,
-					{
-						Kind:    DebPackageInstallOp,
-						Package: selected.Name(),
-						Version: v,
+			if preOps == nil {
+				return &Operation{
+					Kind: CompositeDependencyOp,
+					DependentOperations: []*Operation{
+						nextOps,
+						{
+							Kind:    DebPackageInstallOp,
+							Package: selected.Name(),
+							Version: v,
+							PreDep:  isPreDep,
+						},
 					},
-				},
-			}, nil
+				}, nil
+			} else {
+				return &Operation{
+					Kind: CompositeDependencyOp,
+					DependentOperations: []*Operation{
+						preOps,
+						nextOps,
+						{
+							Kind:    DebPackageInstallOp,
+							Package: selected.Name(),
+							Version: v,
+							PreDep:  isPreDep,
+						},
+					},
+				}, nil
+			}
 		}
 
 	case deb.OrCompositeRequirement:
 		for _, candidateDep := range req.Children {
-			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, candidateDep, req)
+			op, err := p.buildInstallGraphRequirement(coveredDeps, installed, candidateDep, req, isPreDep)
 			if err != nil {
 				if _, wasDep := err.(ErrDependency); wasDep {
 					continue
@@ -324,13 +400,28 @@ func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.V
 	return nil, os.ErrNotExist
 }
 
-func checkSetCoveredDependency(coveredDeps *[]deb.Requirement, req deb.Requirement) bool {
-	for _, covered := range *coveredDeps {
+func checkSetCoveredDependency(coveredDeps *coveredDeps, req deb.Requirement) bool {
+	for _, covered := range coveredDeps.Requirements {
 		if covered.Equal(&req) {
 			return true
 		}
 	}
-	t := append(*coveredDeps, req)
-	*coveredDeps = t
+	coveredDeps.Requirements = append(coveredDeps.Requirements, req)
+	return false
+}
+
+func checkSetCoveredPackage(coveredDeps *coveredDeps, pkg, version string) bool {
+	for _, covered := range coveredDeps.Packages {
+		if covered.Name == pkg && covered.Version == version {
+			return true
+		}
+	}
+	coveredDeps.Packages = append(coveredDeps.Packages, struct {
+		Name    string
+		Version string
+	}{
+		Name:    pkg,
+		Version: version,
+	})
 	return false
 }

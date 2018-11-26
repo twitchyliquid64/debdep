@@ -89,7 +89,7 @@ debdep.SetDistribution("testing")
 debdep.SetArch("amd64")
 ```
 
-Read & Parse all packages in the Debian repositories.
+Read & Parse all packages in the configured Debian repository.
 
 ```go
 
@@ -120,4 +120,5 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
 ## TODO
  * Fix known issues.
  * Support for source packages.
+ * Support for multi-arch.
  * Support specifying which packages are already installed.

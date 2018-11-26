@@ -32,6 +32,32 @@ func main() {
 		}
 		pkg.PrettyWrite(os.Stdout, 1)
 
+	case "bootstrap-sequence":
+		if flag.NArg() < 2 {
+			fmt.Fprintf(os.Stderr, "USAGE: %s calculate-deps <package-name>\n", os.Args[0])
+			os.Exit(1)
+		}
+
+		pkgs, err := debdep.Packages(true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("# Read %d packages.\n", len(pkgs.Packages))
+
+		pkg, err := pkgs.InstallGraph(flag.Arg(1), &debdep.PackageInfo{})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		for i, op := range pkg.Unroll() {
+			marker := "[ ]"
+			if op.PreDep {
+				marker = "[*]"
+			}
+			fmt.Printf("%.03d %s %s %s\n", i, marker, op.Package, op.Version.String())
+		}
+
 	case "check-dist":
 		err := debdep.CheckReleaseStatus()
 		if err != nil {

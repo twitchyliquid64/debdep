@@ -37,6 +37,16 @@ func (p *Paragraph) BinaryDepends() (Requirement, error) {
 	return ParsePackageRelations(dep)
 }
 
+// BinaryPreDepends returns a requirements graph representing the binary
+// pre-dependencies of the package.
+func (p *Paragraph) BinaryPreDepends() (Requirement, error) {
+	dep, ok := p.Values["Pre-Depends"]
+	if !ok {
+		return Requirement{}, nil
+	}
+	return ParsePackageRelations(dep)
+}
+
 // RequirementKind disambiguates nodes in the requirements tree.
 type RequirementKind uint8
 
