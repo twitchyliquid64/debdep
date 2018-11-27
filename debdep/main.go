@@ -12,6 +12,28 @@ func main() {
 	flag.Parse()
 
 	switch flag.Arg(0) {
+	case "all-priority":
+		if flag.NArg() < 2 {
+			fmt.Fprintf(os.Stderr, "USAGE: %s all-priority <all-priority>\n", os.Args[0])
+			os.Exit(1)
+		}
+
+		pkgs, err := debdep.Packages(true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Read %d packages.\n", len(pkgs.Packages))
+		var packages []string
+		if flag.Arg(1) == "essential" {
+			packages = pkgs.GetAllEssential()
+		} else {
+			packages = pkgs.GetAllByPriority(flag.Arg(1))
+		}
+		for i, p := range packages {
+			fmt.Printf("%.03d %s\n", i, p)
+		}
+
 	case "calculate-deps":
 		if flag.NArg() < 2 {
 			fmt.Fprintf(os.Stderr, "USAGE: %s calculate-deps <package-name>\n", os.Args[0])

@@ -152,6 +152,30 @@ type PackageInfo struct {
 	Packages       map[string]map[version.Version]*deb.Paragraph
 }
 
+// GetAllByPriority returns all packages with a given priority.
+func (p *PackageInfo) GetAllByPriority(priority string) []string {
+	var out []string
+	for n, _ := range p.Packages {
+		latest, _ := p.FindLatest(n)
+		if latest.Values["Priority"] == priority {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// GetAllEssential returns all packages marked as essential.
+func (p *PackageInfo) GetAllEssential() []string {
+	var out []string
+	for n, _ := range p.Packages {
+		latest, _ := p.FindLatest(n)
+		if latest.Values["Essential"] == "yes" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 func Packages(binary bool) (*PackageInfo, error) {
 	r, err := repositoryPackagesReader(binary)
 	if err != nil {

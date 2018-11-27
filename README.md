@@ -135,4 +135,5 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
  * Fix known issues.
  * Support for source packages.
  * Support for multi-arch.
+ * Verify the integrity of the remote repository.
  * Support specifying which packages are already installed.
