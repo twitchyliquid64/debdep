@@ -61,7 +61,12 @@ func (d *Decoder) Decode(out *Paragraph) error {
 			if i < 0 {
 				return fmt.Errorf("expected colon in line %q", line)
 			}
-			out.Values[line[:i]] = strings.TrimLeftFunc(line[i+2:], unicode.IsSpace)
+
+			if i+2 < len(line) {
+				out.Values[line[:i]] = strings.TrimLeftFunc(line[i+2:], unicode.IsSpace)
+			} else {
+				out.Values[line[:i]] = ""
+			}
 			lastKey = line[:i]
 			lastMultiline = multilineFields[lastKey]
 		}

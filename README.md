@@ -128,7 +128,7 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
 
 ## Known issues
 
- * Wierd behaviour with circular dependencies - not certain the resolver is producing the correct order in this case.
+ * Wierd behavior with circular dependencies - not certain the resolver is producing the correct order in this case.
 
 ## TODO
 
@@ -136,4 +136,6 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
  * Support for source packages.
  * Support for multi-arch.
  * Verify the integrity of the remote repository.
- * Support specifying which packages are already installed.
+ * Support for downloading packages.
+ * Support for extracting packages into the system.
+ * Implement fake-installs to /var/lib/dpkg/status for bootstrapping purposes.

@@ -192,6 +192,16 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 	case deb.PackageRelationRequirement:
 		// Handle a requirement for a single package, which
 		// may be constrained by a version relationship.
+
+		// Check if the requirement is already satisfied by installed packages.
+		isInstalled, err := installed.HasPackage(req)
+		if err != nil {
+			return nil, err
+		}
+		if isInstalled {
+			return &Operation{Kind: CompositeDependencyOp}, nil
+		}
+
 		var selected *deb.Paragraph
 		if req.VersionConstraint == nil { // No version relationship, lets use the latest.
 			latest, err := p.FindLatest(req.Package)

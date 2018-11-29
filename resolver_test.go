@@ -37,7 +37,7 @@ func TestInstallGraph(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err != nil {
 		t.Fatalf("InstallGraph() returned err: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestInstallGraphVersionConstraints(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err != nil {
 		t.Fatalf("InstallGraph() returned err: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestInstallGraphDeepNested(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err != nil {
 		t.Fatalf("InstallGraph() returned err: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestInstallGraphLoop(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err != nil {
 		t.Fatalf("InstallGraph() returned err: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestInstallGraphOrRequirements(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err != nil {
 		t.Fatalf("InstallGraph() returned err: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestInstallGraphUnsatisfiedMissing(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err == nil {
 		t.Fatal("InstallGraph() returned nil instead of error")
 	}
@@ -244,7 +244,7 @@ func TestInstallGraphUnsatisfiedNoVersion(t *testing.T) {
 		},
 	}
 
-	graph, err := pkgInfo.InstallGraph("base", nil)
+	graph, err := pkgInfo.InstallGraph("base", &PackageInfo{})
 	if err == nil {
 		t.Fatal("InstallGraph() returned nil instead of error")
 	}

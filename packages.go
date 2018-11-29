@@ -2,13 +2,18 @@ package debdep
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/twitchyliquid64/debdep/deb"
+	"golang.org/x/crypto/openpgp"
 
 	version "github.com/knqyf263/go-deb-version"
 )
@@ -134,18 +139,6 @@ func CheckReleaseStatus() error {
 	return nil
 }
 
-func repositoryPackagesReader(binary bool) (io.ReadCloser, error) {
-	req, err := http.Get(url(binary) + "/Packages.gz")
-	if err != nil {
-		return nil, err
-	}
-	r, err := gzip.NewReader(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
 // PackageInfo keeps track of package information.
 type PackageInfo struct {
 	BinaryPackages bool
@@ -176,15 +169,33 @@ func (p *PackageInfo) GetAllEssential() []string {
 	return out
 }
 
-func Packages(binary bool) (*PackageInfo, error) {
-	r, err := repositoryPackagesReader(binary)
-	if err != nil {
-		return nil, err
+// HasPackage returns true if a package meeting the
+// given requirements is present.
+func (p *PackageInfo) HasPackage(req deb.Requirement) (bool, error) {
+	if req.Kind != deb.PackageRelationRequirement {
+		return false, errors.New("only requirement.Kind == PackageRelationRequirement supported")
 	}
-	defer r.Close()
-	packages := make(map[string]map[version.Version]*deb.Paragraph)
+	if _, exists := p.Packages[req.Package]; !exists {
+		return false, nil
+	}
+	if req.VersionConstraint == nil {
+		return true, nil
+	} else {
+		if _, err := p.FindWithVersionConstraint(req.Package, req.VersionConstraint); err != nil {
+			if err == os.ErrNotExist {
+				return false, nil
+			}
+			return false, err
+		}
+	}
+	return true, nil
+}
 
+// readPackages consumes package info from the given reader.
+func readPackages(r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
+	packages := make(map[string]map[version.Version]*deb.Paragraph)
 	d := deb.NewDecoder(r)
+
 	for {
 		var p deb.Paragraph
 		err := d.Decode(&p)
@@ -205,7 +216,85 @@ func Packages(binary bool) (*PackageInfo, error) {
 		packages[p.Name()][vers] = &p
 	}
 	return &PackageInfo{
-		BinaryPackages: binary,
+		BinaryPackages: isBinaryPackages,
 		Packages:       packages,
 	}, nil
+}
+
+// LoadPackageInfo reads a file detailing packages from disk.
+func LoadPackageInfo(path string, isBinaryPackages bool) (*PackageInfo, error) {
+	r, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	return readPackages(r, isBinaryPackages)
+}
+
+// repositoryPackagesReader returns a reader for package information from the
+// configured remote repository.
+func repositoryPackagesReader(binary bool) (io.ReadCloser, error) {
+	req, err := http.Get(url(binary) + "/Packages.gz")
+	if err != nil {
+		return nil, err
+	}
+	r, err := gzip.NewReader(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// TODO: make work.
+func fetchReleaseInfo(binary bool) (error, error) {
+	req, err := http.Get(url(binary) + "/Release")
+	if err != nil {
+		return nil, err
+	}
+	defer req.Body.Close()
+	relData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := http.Get(url(binary) + "/Release.gpg")
+	if err != nil {
+		return nil, err
+	}
+	defer sig.Body.Close()
+	sigData, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	keys, err := os.Open("/usr/share/keyrings/debian-archive-keyring.gpg")
+	if err != nil {
+		return nil, err
+	}
+	defer keys.Close()
+	keyring, err := openpgp.ReadKeyRing(keys)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("Keys: %+v\n", keyring)
+	for i, _ := range keyring {
+		fmt.Printf("\t%+v\n", keyring[i])
+	}
+	if _, err := openpgp.CheckDetachedSignature(keyring, bytes.NewBuffer(relData), bytes.NewBuffer(sigData)); err != nil {
+		return nil, fmt.Errorf("Signature check failed: %v", err)
+	}
+
+	return nil, nil
+}
+
+// Packages returns information about packages available in the
+// remote repository.
+func Packages(binary bool) (*PackageInfo, error) {
+	r, err := repositoryPackagesReader(binary)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return readPackages(r, binary)
 }

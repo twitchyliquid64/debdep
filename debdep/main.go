@@ -8,100 +8,130 @@ import (
 	"github.com/twitchyliquid64/debdep"
 )
 
+var (
+	fetchBase         = flag.String("addr", "https://cdn-aws.deb.debian.org/debian", "Base repository URL")
+	codename          = flag.String("codename", "buster", "Debian codename")
+	arch              = flag.String("arch", "amd64", "Architecture")
+	pkgsFromFile      = flag.String("packages_file", "", "Path to read package info from instead of fetching from remote")
+	installedFromFile = flag.String("installed_file", "", "Path to read installed package info")
+)
+
 func main() {
 	flag.Parse()
+	debdep.SetBaseURL(*fetchBase)
+	debdep.SetCodename(*codename)
+	debdep.SetArch(*arch)
+
+	var packages *debdep.PackageInfo
+	var err error
+	installed := &debdep.PackageInfo{}
+	if *installedFromFile != "" {
+		installed, err = debdep.LoadPackageInfo(*installedFromFile, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading installed packages: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *pkgsFromFile == "" {
+		packages, err = debdep.Packages(true)
+	} else {
+		packages, err = debdep.LoadPackageInfo(*pkgsFromFile, true)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading packages: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "Read %d packages.\n", len(packages.Packages))
 
 	switch flag.Arg(0) {
 	case "all-priority":
-		if flag.NArg() < 2 {
-			fmt.Fprintf(os.Stderr, "USAGE: %s all-priority <all-priority>\n", os.Args[0])
-			os.Exit(1)
-		}
-
-		pkgs, err := debdep.Packages(true)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Read %d packages.\n", len(pkgs.Packages))
-		var packages []string
-		if flag.Arg(1) == "essential" {
-			packages = pkgs.GetAllEssential()
-		} else {
-			packages = pkgs.GetAllByPriority(flag.Arg(1))
-		}
-		for i, p := range packages {
-			fmt.Printf("%.03d %s\n", i, p)
-		}
+		allPriorityCmd(packages, flag.Arg(1))
 
 	case "calculate-deps":
-		if flag.NArg() < 2 {
-			fmt.Fprintf(os.Stderr, "USAGE: %s calculate-deps <package-name>\n", os.Args[0])
-			os.Exit(1)
-		}
-
-		pkgs, err := debdep.Packages(true)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Read %d packages.\n", len(pkgs.Packages))
-
-		pkg, err := pkgs.InstallGraph(flag.Arg(1), &debdep.PackageInfo{})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		pkg.PrettyWrite(os.Stdout, 1)
+		calculateDepsCommand(packages, installed, flag.Arg(1))
 
 	case "bootstrap-sequence":
-		if flag.NArg() < 2 {
-			fmt.Fprintf(os.Stderr, "USAGE: %s calculate-deps <package-name>\n", os.Args[0])
-			os.Exit(1)
-		}
-
-		pkgs, err := debdep.Packages(true)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("# Read %d packages.\n", len(pkgs.Packages))
-
-		pkg, err := pkgs.InstallGraph(flag.Arg(1), &debdep.PackageInfo{})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		for i, op := range pkg.Unroll() {
-			marker := "[ ]"
-			if op.PreDep {
-				marker = "[*]"
-			}
-			fmt.Printf("%.03d %s %s %s\n", i, marker, op.Package, op.Version.String())
-		}
+		bootstrapSequenceCmd(packages, installed, flag.Arg(1))
 
 	case "check-dist":
-		err := debdep.CheckReleaseStatus()
-		if err != nil {
-			if relData, ok := err.(debdep.ReleaseInconsistency); ok {
-				fmt.Printf("Configured debian state is inconsistent with the repositories!\n")
-				if relData.WantDistro != "" {
-					fmt.Printf("\tDistribution = %q (our setting: %q)\n", relData.GotDistro, relData.WantDistro)
-				}
-				if relData.WantArch != "" {
-					fmt.Printf("\tArch = %q (our setting: %q)\n", relData.GotArch, relData.WantArch)
-				}
-				if relData.WantComponent != "" {
-					fmt.Printf("\tComponent = %q (our setting: %q)\n", relData.GotComponent, relData.WantComponent)
-				}
-			} else {
-				fmt.Printf("Error: %v\n", err)
-				os.Exit(1)
-			}
-		}
+		checkDistCmd()
 
 	default:
 		fmt.Printf("Unknown command: %q\n", flag.Arg(0))
+		fmt.Println("Available commands: all-priority, calculate-deps, bootstrap-sequence, check-dist")
 		os.Exit(1)
+	}
+}
+
+func calculateDepsCommand(pkgs, installed *debdep.PackageInfo, pkgName string) {
+	if flag.NArg() < 2 {
+		fmt.Fprintf(os.Stderr, "USAGE: %s calculate-deps <package-name>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	pkg, err := pkgs.InstallGraph(pkgName, installed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	pkg.PrettyWrite(os.Stdout, 1)
+}
+
+func allPriorityCmd(pkgs *debdep.PackageInfo, priority string) {
+	if flag.NArg() < 2 {
+		fmt.Fprintf(os.Stderr, "USAGE: %s all-priority <all-priority>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	var packages []string
+	if flag.Arg(1) == "essential" {
+		packages = pkgs.GetAllEssential()
+	} else {
+		packages = pkgs.GetAllByPriority(priority)
+	}
+	for i, p := range packages {
+		fmt.Printf("%.03d %s\n", i, p)
+	}
+}
+
+func bootstrapSequenceCmd(pkgs, installed *debdep.PackageInfo, pkgName string) {
+	if flag.NArg() < 2 {
+		fmt.Fprintf(os.Stderr, "USAGE: %s bootstrap-sequence <package-name>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	pkg, err := pkgs.InstallGraph(pkgName, installed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	for i, op := range pkg.Unroll() {
+		marker := "[ ]"
+		if op.PreDep {
+			marker = "[*]"
+		}
+		fmt.Printf("%.03d %s %s %s\n", i, marker, op.Package, op.Version.String())
+	}
+}
+
+func checkDistCmd() {
+	err := debdep.CheckReleaseStatus()
+	if err != nil {
+		if relData, ok := err.(debdep.ReleaseInconsistency); ok {
+			fmt.Printf("Configured debian state is inconsistent with the repositories!\n")
+			if relData.WantDistro != "" {
+				fmt.Printf("\tDistribution = %q (our setting: %q)\n", relData.GotDistro, relData.WantDistro)
+			}
+			if relData.WantArch != "" {
+				fmt.Printf("\tArch = %q (our setting: %q)\n", relData.GotArch, relData.WantArch)
+			}
+			if relData.WantComponent != "" {
+				fmt.Printf("\tComponent = %q (our setting: %q)\n", relData.GotComponent, relData.WantComponent)
+			}
+		} else {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
