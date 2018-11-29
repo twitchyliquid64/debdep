@@ -72,7 +72,7 @@ func calculateDepsCommand(pkgs, installed *debdep.PackageInfo, pkgName string) {
 
 	pkg, err := pkgs.InstallGraph(pkgName, installed)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error generating install graph: %v\n", err)
 		os.Exit(1)
 	}
 	pkg.PrettyWrite(os.Stdout, 1)

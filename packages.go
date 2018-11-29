@@ -141,8 +141,9 @@ func CheckReleaseStatus() error {
 
 // PackageInfo keeps track of package information.
 type PackageInfo struct {
-	BinaryPackages bool
-	Packages       map[string]map[version.Version]*deb.Paragraph
+	BinaryPackages  bool
+	Packages        map[string]map[version.Version]*deb.Paragraph
+	virtualPackages map[string][]*deb.Paragraph
 }
 
 // GetAllByPriority returns all packages with a given priority.
@@ -169,13 +170,16 @@ func (p *PackageInfo) GetAllEssential() []string {
 	return out
 }
 
-// HasPackage returns true if a package meeting the
-// given requirements is present.
+// HasPackage returns true if a package meeting the given requirements
+// is present. This includes virtual packages.
 func (p *PackageInfo) HasPackage(req deb.Requirement) (bool, error) {
 	if req.Kind != deb.PackageRelationRequirement {
 		return false, errors.New("only requirement.Kind == PackageRelationRequirement supported")
 	}
 	if _, exists := p.Packages[req.Package]; !exists {
+		if _, virtPkgExists := p.virtualPackages[req.Package]; virtPkgExists && req.VersionConstraint == nil {
+			return true, nil
+		}
 		return false, nil
 	}
 	if req.VersionConstraint == nil {
@@ -191,9 +195,15 @@ func (p *PackageInfo) HasPackage(req deb.Requirement) (bool, error) {
 	return true, nil
 }
 
+// AddPkg appends a package, overwriting any name+version combination that already exists.
+func (p *PackageInfo) AddPkg(pkg *deb.Paragraph) error {
+	return pkgInfoAppend(pkg, p.Packages, p.virtualPackages)
+}
+
 // readPackages consumes package info from the given reader.
 func readPackages(r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
 	packages := make(map[string]map[version.Version]*deb.Paragraph)
+	virtualPackages := make(map[string][]*deb.Paragraph)
 	d := deb.NewDecoder(r)
 
 	for {
@@ -206,19 +216,31 @@ func readPackages(r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
 			return nil, err
 		}
 
-		if _, ok := packages[p.Name()]; !ok {
-			packages[p.Name()] = make(map[version.Version]*deb.Paragraph)
-		}
-		vers, err := p.Version()
-		if err != nil {
+		if err := pkgInfoAppend(&p, packages, virtualPackages); err != nil {
 			return nil, err
 		}
-		packages[p.Name()][vers] = &p
 	}
 	return &PackageInfo{
-		BinaryPackages: isBinaryPackages,
-		Packages:       packages,
+		BinaryPackages:  isBinaryPackages,
+		Packages:        packages,
+		virtualPackages: virtualPackages,
 	}, nil
+}
+
+func pkgInfoAppend(p *deb.Paragraph, packages map[string]map[version.Version]*deb.Paragraph, virtualPackages map[string][]*deb.Paragraph) error {
+	if _, ok := packages[p.Name()]; !ok {
+		packages[p.Name()] = make(map[version.Version]*deb.Paragraph)
+	}
+	vers, err := p.Version()
+	if err != nil {
+		return err
+	}
+	packages[p.Name()][vers] = p
+
+	for _, virtualPackage := range p.Provides() {
+		virtualPackages[virtualPackage] = append(virtualPackages[virtualPackage], p)
+	}
+	return nil
 }
 
 // LoadPackageInfo reads a file detailing packages from disk.

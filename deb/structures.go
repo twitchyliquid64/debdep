@@ -2,6 +2,7 @@ package deb
 
 import (
 	"errors"
+	"strings"
 
 	version "github.com/knqyf263/go-deb-version"
 )
@@ -45,6 +46,12 @@ func (p *Paragraph) BinaryPreDepends() (Requirement, error) {
 		return Requirement{}, nil
 	}
 	return ParsePackageRelations(dep)
+}
+
+// Provides returns a list of virtual packages this concrete package
+// provides.
+func (p *Paragraph) Provides() []string {
+	return strings.Split(strings.Replace(p.Values["Provides"], " ", "", -1), ",")
 }
 
 // RequirementKind disambiguates nodes in the requirements tree.

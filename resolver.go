@@ -104,8 +104,9 @@ func (o *Operation) Unroll() []Operation {
 type coveredDeps struct {
 	Requirements []deb.Requirement
 	Packages     []struct {
-		Name    string
-		Version string
+		Name            string
+		Version         string
+		VirtualProvides []string // Virtual packages this package provides.
 	}
 }
 
@@ -203,18 +204,28 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 		}
 
 		var selected *deb.Paragraph
+		// TODO: Decompose into its own function.
 		if req.VersionConstraint == nil { // No version relationship, lets use the latest.
 			latest, err := p.FindLatest(req.Package)
 			if err != nil {
 				if err == os.ErrNotExist {
-					return nil, ErrDependency{
-						DependencyPackage: req.Package,
-						RequiredByPackage: parent.Package,
+					virtualCandidates, err := p.FindProvides(req.Package)
+					if err != nil {
+						if err == os.ErrNotExist {
+							return nil, ErrDependency{
+								DependencyPackage: req.Package,
+								RequiredByPackage: parent.Package,
+							}
+						}
+						return nil, err
 					}
+					selected = virtualCandidates[0]
+				} else {
+					return nil, err
 				}
-				return nil, err
+			} else {
+				selected = latest
 			}
-			selected = latest
 		} else {
 			pkg, err := p.FindWithVersionConstraint(req.Package, req.VersionConstraint)
 			if err != nil {
@@ -237,7 +248,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 
 		// Another short-circuit: if we already have installed this package+version,
 		// we bail out by returning a structure symbolizing a no-op.
-		if checkSetCoveredPackage(coveredDeps, selected.Name(), v.String()) {
+		if checkSetCoveredPackage(coveredDeps, selected.Name(), v.String(), selected.Provides()) {
 			return &Operation{Kind: CompositeDependencyOp}, nil
 		}
 
@@ -350,6 +361,15 @@ func (p *PackageInfo) FindLatest(target string) (*deb.Paragraph, error) {
 	return pkgs[vers[len(vers)-1]], nil
 }
 
+// FindProvides returns all packages which provide a given virtual package name.
+func (p *PackageInfo) FindProvides(target string) ([]*deb.Paragraph, error) {
+	pkgs, ok := p.virtualPackages[target]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return pkgs, nil
+}
+
 // FindWithVersionConstraint tries to find a version of the package that satisfies the
 // given version constraint.
 func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.VersionConstraint) (*deb.Paragraph, error) {
@@ -435,18 +455,20 @@ func checkSetCoveredDependency(coveredDeps *coveredDeps, req deb.Requirement) bo
 // checkSetCoveredPackage returns true if that package+version has already been
 // satisfied in the install graph.
 // If the requirement has not been satisfied, it is added to coveredDeps.
-func checkSetCoveredPackage(coveredDeps *coveredDeps, pkg, version string) bool {
+func checkSetCoveredPackage(coveredDeps *coveredDeps, pkg, version string, virtualProvides []string) bool {
 	for _, covered := range coveredDeps.Packages {
 		if covered.Name == pkg && covered.Version == version {
 			return true
 		}
 	}
 	coveredDeps.Packages = append(coveredDeps.Packages, struct {
-		Name    string
-		Version string
+		Name            string
+		Version         string
+		VirtualProvides []string
 	}{
-		Name:    pkg,
-		Version: version,
+		Name:            pkg,
+		Version:         version,
+		VirtualProvides: virtualProvides,
 	})
 	return false
 }
