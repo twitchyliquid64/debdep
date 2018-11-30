@@ -197,7 +197,26 @@ func (p *PackageInfo) HasPackage(req deb.Requirement) (bool, error) {
 
 // AddPkg appends a package, overwriting any name+version combination that already exists.
 func (p *PackageInfo) AddPkg(pkg *deb.Paragraph) error {
+	if p.virtualPackages == nil {
+		p.virtualPackages = make(map[string][]*deb.Paragraph)
+	}
+	if p.Packages == nil {
+		p.Packages = make(map[string]map[version.Version]*deb.Paragraph)
+	}
 	return pkgInfoAppend(pkg, p.Packages, p.virtualPackages)
+}
+
+// FetchPath returns the URL to retrieve a package.
+func (p *PackageInfo) FetchPath(pkg string, version version.Version) (string, error) {
+	pkgs, ok := p.Packages[pkg]
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	s, ok := pkgs[version]
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	return fetchBase + s.Values["Filename"], nil
 }
 
 // readPackages consumes package info from the given reader.
@@ -254,9 +273,9 @@ func LoadPackageInfo(path string, isBinaryPackages bool) (*PackageInfo, error) {
 	return readPackages(r, isBinaryPackages)
 }
 
-// repositoryPackagesReader returns a reader for package information from the
+// RepositoryPackagesReader returns a reader for package information from the
 // configured remote repository.
-func repositoryPackagesReader(binary bool) (io.ReadCloser, error) {
+func RepositoryPackagesReader(binary bool) (io.ReadCloser, error) {
 	req, err := http.Get(url(binary) + "/Packages.gz")
 	if err != nil {
 		return nil, err
@@ -313,7 +332,7 @@ func fetchReleaseInfo(binary bool) (error, error) {
 // Packages returns information about packages available in the
 // remote repository.
 func Packages(binary bool) (*PackageInfo, error) {
-	r, err := repositoryPackagesReader(binary)
+	r, err := RepositoryPackagesReader(binary)
 	if err != nil {
 		return nil, err
 	}

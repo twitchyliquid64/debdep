@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/twitchyliquid64/debdep"
@@ -57,9 +58,41 @@ func main() {
 	case "check-dist":
 		checkDistCmd()
 
+	case "download-pkg-info":
+		downloadPackageInfo(flag.Arg(1))
+
+	case "download-priority-deps":
+		downloadPriorityDeps(packages, installed, flag.Arg(1), flag.Arg(2))
+
 	default:
 		fmt.Printf("Unknown command: %q\n", flag.Arg(0))
 		fmt.Println("Available commands: all-priority, calculate-deps, bootstrap-sequence, check-dist")
+		os.Exit(1)
+	}
+}
+
+func downloadPackageInfo(path string) {
+	if flag.NArg() < 2 {
+		fmt.Fprintf(os.Stderr, "USAGE: %s download-pkg-info <output-path>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	r, err := debdep.RepositoryPackagesReader(true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer r.Close()
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0655)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, r); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -85,7 +118,7 @@ func allPriorityCmd(pkgs *debdep.PackageInfo, priority string) {
 	}
 
 	var packages []string
-	if flag.Arg(1) == "essential" {
+	if priority == "essential" {
 		packages = pkgs.GetAllEssential()
 	} else {
 		packages = pkgs.GetAllByPriority(priority)

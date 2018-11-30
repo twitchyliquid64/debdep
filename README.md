@@ -15,6 +15,17 @@ Functions are exposed to :
 
 See the main package `debdep`.
 
+#### Installation
+
+Make sure you have `go` installed.
+
+```shell
+go get github.com/twitchyliquid64/debdep
+go build -o debdep github.com/twitchyliquid64/debdep/debdep
+sudo install -v -m 0755 --strip debdep /usr/bin/debdep
+```
+
+
 *Calculate-deps* sub-command:
 
 ```shell
