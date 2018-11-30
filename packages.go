@@ -216,7 +216,7 @@ func (p *PackageInfo) FetchPath(pkg string, version version.Version) (string, er
 	if !ok {
 		return "", os.ErrNotExist
 	}
-	return fetchBase + s.Values["Filename"], nil
+	return fetchBase + "/" + s.Values["Filename"], nil
 }
 
 // readPackages consumes package info from the given reader.
