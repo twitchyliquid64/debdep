@@ -26,10 +26,106 @@ sudo install -v -m 0755 --strip debdep /usr/bin/debdep
 ```
 
 
-*Calculate-deps* sub-command:
+**Additional arguments**
+
+ * `--packages_file` - Path to the available packages file, will be used instead of reading the package list from the web repository.
+ * `--installed_file` - Path to the status file, which details all installed packages. This is typically `/var/lib/dpkg/status`. If specified, packages which
+ are already installed will not be included in the dependency graph.
+
+
+ **download-pkg-info**
+
+ Downloads the package information file to the given path.
+
+
+ **download-priority-deps**
+
+ Downloads all packages with the given priority (or, if *essential*, all essential packages), and downloads
+ their dependencies (including pre-dependencies).
+
+ ```shell
+ > go run github.com/twitchyliquid64/debdep/debdep download-priority-deps essential ./
+
+ Downloading: libaudit-common (1:2.8.4-2)
+ Downloading: gcc-8-base (8.2.0-9)
+ Downloading: libgcc1 (1:8.2.0-9)
+ Downloading: libc6 (2.27-8)
+ Downloading: libcap-ng0 (0.7.9-1)
+ Downloading: libaudit1 (1:2.8.4-2)
+ Downloading: libbz2-1.0 (1.0.6-9)
+ Downloading: liblzma5 (5.2.2-1.3)
+ Downloading: libpcre3 (2:8.39-11)
+ Downloading: libselinux1 (2.8-1+b1)
+ Downloading: zlib1g (1:1.2.11.dfsg-1)
+ Downloading: libattr1 (1:2.4.47-2+b2)
+ Downloading: libacl1 (2.2.52-3+b1)
+ Downloading: tar (1.30+dfsg-3)
+ Downloading: dpkg (1.19.2)
+ Downloading: perl-base (5.28.0-4)
+ Downloading: debconf (1.5.69)
+ Downloading: libpam0g (1.1.8-3.8)
+ Downloading: libdb5.3 (5.3.28+dfsg1-0.2)
+ Downloading: libpam-modules-bin (1.1.8-3.8)
+ Downloading: libpam-modules (1.1.8-3.8)
+ Downloading: libpam-runtime (1.1.8-3.8)
+ Downloading: login (1:4.5-1.1)
+ Downloading: debianutils (4.8.6)
+ Downloading: diffutils (1:3.6-1)
+ Downloading: libgpg-error0 (1.32-3)
+ Downloading: libgcrypt20 (1.8.4-3)
+ Downloading: liblz4-1 (1.8.2-1)
+ Downloading: libsystemd0 (239-13)
+ Downloading: bsdutils (1:2.32.1-0.1)
+ Downloading: libuuid1 (2.32.1-0.1)
+ Downloading: libblkid1 (2.32.1-0.1)
+ Downloading: libmount1 (2.32.1-0.1)
+ Downloading: libsmartcols1 (2.32.1-0.1)
+ Downloading: libtinfo6 (6.1+20181013-1)
+ Downloading: libudev1 (239-13)
+ Downloading: libfdisk1 (2.32.1-0.1)
+ Downloading: libncursesw6 (6.1+20181013-1)
+ Downloading: fdisk (2.32.1-0.1)
+ Downloading: util-linux (2.32.1-0.1)
+ Downloading: coreutils (8.30-1)
+ Downloading: libdebconfclient0 (0.245)
+ Downloading: base-passwd (3.5.45)
+ Downloading: libgmp10 (2:6.1.2+dfsg-3)
+ Downloading: libmpfr6 (4.0.1-1)
+ Downloading: readline-common (7.0-5)
+ Downloading: libreadline7 (7.0-5)
+ Downloading: libsigsegv2 (2.12-2)
+ Downloading: gawk (1:4.2.1+dfsg-1)
+ Downloading: base-files (10.1)
+ Downloading: bash (4.4.18-3.1)
+ Downloading: gzip (1.9-2.1)
+ Downloading: grep (3.1-2)
+ Downloading: hostname (3.21)
+ Downloading: libc-bin (2.27-8)
+ Downloading: findutils (4.6.0+git+20181018-1)
+ Downloading: ncurses-bin (6.1+20181013-1)
+ Downloading: ncurses-base (6.1+20181013-1)
+ Downloading: init-system-helpers (1.56)
+ Downloading: sysvinit-utils (2.92~beta-2)
+ Downloading: sed (4.5-2)
+ Downloading: dash (0.5.10.2-1)
+ ```
+
+**download-specific-deps sub-command**
+
+This command downloads all the packages specified, and all their dependencies.
+
+This is intended to be used with `--installed_file`, which will avoid downloading
+dependencies which are already installed.
 
 ```shell
+./debdep download-specific-deps "apt screen htop" /var/my_debs
+```
 
+**calculate-deps sub-command**
+
+This command shows the dependency tree for a given package.
+
+```shell
 ./debdep calculate-deps screen
 
 Read 55944 packages.
@@ -66,10 +162,11 @@ Read 55944 packages.
   package-dep: [ ] dpkg (1.19.2)
 ```
 
-*bootstrap-sequence* sub-command:
+**bootstrap-sequence sub-command**
+
+This command shows an ordered list of packages that must be installed to install the given package.
 
 ```shell
-
 ./debdep bootstrap-sequence screen
 
 # Read 55944 packages.
@@ -97,9 +194,39 @@ Read 55944 packages.
 
 ```
 
-The asterisks symbolize pre-dependencies. These can be thought of as install 'barriers', which must be fully
-installed before subsequent packages can begin to be installed.
+The asterisks symbolize pre-dependencies.
 
+**all-priority**
+
+Lists all packages with a given priority (also works with the special-case of `Essential: yes`)
+
+```shell
+> debdep all-priority essential
+
+000 libc-bin
+001 sed
+002 util-linux
+003 gzip
+004 ncurses-bin
+005 bash
+006 diffutils
+007 bsdutils
+008 base-passwd
+009 perl-base
+010 tar
+011 grep
+012 debianutils
+013 login
+014 coreutils
+015 sysvinit-utils
+016 findutils
+017 dash
+018 base-files
+019 hostname
+020 dpkg
+021 ncurses-base
+022 init-system-helpers
+```
 
 ### In Go:
 
