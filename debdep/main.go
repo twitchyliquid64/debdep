@@ -64,9 +64,12 @@ func main() {
 	case "download-priority-deps":
 		downloadPriorityDeps(packages, installed, flag.Arg(1), flag.Arg(2))
 
+	case "download-specific-deps":
+		downloadSpecificDeps(packages, installed, flag.Arg(1), flag.Arg(2))
+
 	default:
 		fmt.Printf("Unknown command: %q\n", flag.Arg(0))
-		fmt.Println("Available commands: all-priority, calculate-deps, bootstrap-sequence, check-dist")
+		fmt.Println("Available commands: all-priority, calculate-deps, bootstrap-sequence, check-dist, download-pkg-info, download-priority-deps, download-specific-deps")
 		os.Exit(1)
 	}
 }

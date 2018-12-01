@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +17,20 @@ import (
 	"github.com/twitchyliquid64/debdep"
 	"github.com/twitchyliquid64/debdep/deb"
 )
+
+var tr = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	MaxIdleConns:          3,
+	IdleConnTimeout:       30 * time.Second,
+	TLSHandshakeTimeout:   15 * time.Second,
+	ExpectContinueTimeout: 5 * time.Second,
+	DisableCompression:    false,
+}
 
 func multitargetInstallGraph(pkgs, installed *debdep.PackageInfo, targets []string) ([]debdep.Operation, error) {
 	var debOps []debdep.Operation
@@ -135,19 +150,31 @@ func downloadPriorityDeps(pkgs, installed *debdep.PackageInfo, priority, outPath
 		return err
 	}
 
-	tr := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          3,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   15 * time.Second,
-		ExpectContinueTimeout: 5 * time.Second,
-		DisableCompression:    false,
+	workChan := make(chan downloadWork)
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go downloadWorker(&wg, workChan, pkgs, tr)
 	}
+	for _, op := range debOps {
+		workChan <- downloadWork{
+			OutPath: outPath,
+			Package: op.Package,
+			Version: op.Version,
+		}
+	}
+	close(workChan)
+	wg.Wait()
+
+	return nil
+}
+
+func downloadSpecificDeps(pkgs, installed *debdep.PackageInfo, deps, outPath string) error {
+	debOps, err := multitargetInstallGraph(pkgs, installed, strings.Split(deps, " "))
+	if err != nil {
+		return err
+	}
+
 	workChan := make(chan downloadWork)
 	var wg sync.WaitGroup
 	for i := 0; i < 3; i++ {
