@@ -2,18 +2,15 @@ package debdep
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/twitchyliquid64/debdep/deb"
-	"golang.org/x/crypto/openpgp"
 
 	version "github.com/knqyf263/go-deb-version"
 )
@@ -288,46 +285,46 @@ func RepositoryPackagesReader(binary bool) (io.ReadCloser, error) {
 }
 
 // TODO: make work.
-func fetchReleaseInfo(binary bool) (error, error) {
-	req, err := http.Get(url(binary) + "/Release")
-	if err != nil {
-		return nil, err
-	}
-	defer req.Body.Close()
-	relData, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
+// func fetchReleaseInfo(binary bool) (error, error) {
+// 	req, err := http.Get(url(binary) + "/Release")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer req.Body.Close()
+// 	relData, err := ioutil.ReadAll(req.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	sig, err := http.Get(url(binary) + "/Release.gpg")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer sig.Body.Close()
+// 	sigData, err := ioutil.ReadAll(req.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	keys, err := os.Open("/usr/share/keyrings/debian-archive-keyring.gpg")
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer keys.Close()
+// 	keyring, err := openpgp.ReadKeyRing(keys)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	fmt.Printf("Keys: %+v\n", keyring)
+// 	for i, _ := range keyring {
+// 		fmt.Printf("\t%+v\n", keyring[i])
+// 	}
+// 	if _, err := openpgp.CheckDetachedSignature(keyring, bytes.NewBuffer(relData), bytes.NewBuffer(sigData)); err != nil {
+// 		return nil, fmt.Errorf("Signature check failed: %v", err)
+// 	}
 
-	sig, err := http.Get(url(binary) + "/Release.gpg")
-	if err != nil {
-		return nil, err
-	}
-	defer sig.Body.Close()
-	sigData, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	keys, err := os.Open("/usr/share/keyrings/debian-archive-keyring.gpg")
-	if err != nil {
-		return nil, err
-	}
-	defer keys.Close()
-	keyring, err := openpgp.ReadKeyRing(keys)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("Keys: %+v\n", keyring)
-	for i, _ := range keyring {
-		fmt.Printf("\t%+v\n", keyring[i])
-	}
-	if _, err := openpgp.CheckDetachedSignature(keyring, bytes.NewBuffer(relData), bytes.NewBuffer(sigData)); err != nil {
-		return nil, fmt.Errorf("Signature check failed: %v", err)
-	}
-
-	return nil, nil
-}
+// 	return nil, nil
+// }
 
 // Packages returns information about packages available in the
 // remote repository.
