@@ -1,6 +1,6 @@
 # debdep
 
-Debdep understand the dependency tree in Debian packages, and can be used to parse the package list
+Debdep understands the dependency tree of Debian packages, and can be used to parse the package list
 in the debian repositories.
 
 Functions are exposed to :
@@ -18,6 +18,21 @@ See the main package `debdep`.
 #### Installation
 
 Make sure you have `go` installed.
+
+You can install using either of the following methods.
+
+##### Build a .deb
+
+```shell
+export GOPATH=`pwd` #Set the gopath to work from the current directory
+go get github.com/twitchyliquid64/debdep
+$GOPATH/src/github.com/twitchyliquid64/debdep/build_deb.sh /tmp/debdep_staging_area
+# You should now have a .deb file in your working directory,
+# which you can install like this:
+sudo dpkg -i debdep_0.1.0_amd64.deb
+```
+
+##### Manual
 
 ```shell
 go get github.com/twitchyliquid64/debdep
