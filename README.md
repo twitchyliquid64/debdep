@@ -267,6 +267,7 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
 ## Known issues
 
  * Wierd behavior with circular dependencies - not certain the resolver is producing the correct order in this case.
+ * Debdep can only resolve dependencies within a single (by default, *main*) component.
 
 ## TODO
 
@@ -274,6 +275,4 @@ pkg.PrettyWrite(os.Stdout, 1) // Pretty-print the graph.
  * Support for source packages.
  * Support for multi-arch.
  * Verify the integrity of the remote repository.
- * Support for downloading packages.
- * Support for extracting packages into the system.
- * Implement fake-installs to /var/lib/dpkg/status for bootstrapping purposes.
+ * Support the <package>:any notation.
