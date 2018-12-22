@@ -1,0 +1,72 @@
+.TH DEBDEP "1" "December 2018" "Debdep 0.1.1" "User Commands"
+.SH NAME
+debdep \- query/operate on debian packages without using apt/dpkg
+
+.SH SYNOPSIS
+.B debdep
+[\fB\-\-packages_file\fR \fIPKG_PATH\fR]
+[\fB\-\-installed_file\fR \fISTATUSFILE_PATH\fR]
+[\fB\-\-codename\fR \fIDEBIAN_CODENAME\fR]
+[\fB\-\-arch\fR \fIARCH\fR]
+[\fB\-\-addr\fR \fIMIRROR_URL\fR]
+.IR sub-command
+.RI [ "command specific parameters"]
+
+.SH DESCRIPTION
+.B debdep
+Debdep understands the dependency tree of Debian packages, and can
+be used to parse the package list in the debian repositories.
+
+.SH SUB-COMMANDS
+.TP
+.B download\-pkg\-info
+Downloads the package information file to the given path.
+.TP
+.B download\-priority\-deps
+Downloads all packages with the given priority (or, if
+\fIessential\fR, all essential packages), and downloads
+their dependencies (including pre-dependencies).
+.TP
+.B download\-specific\-deps
+This command downloads all the packages specified, and all their
+dependencies.
+
+This is intended to be used with
+[\fB\-\-installed_file\fR \fISTATUSFILE_PATH\fR], which will
+avoid downloading dependencies which are already installed.
+.TP
+.B calculate\-deps
+This command shows the dependency tree for a given package.
+.TP
+.B bootstrap\-sequence
+This command shows an ordered list of packages that must be installed to
+install the given package.
+.TP
+.B all\-priority
+Lists all packages with a given priority (also works with the
+special-case of "Essential: yes")
+
+.SH OPTIONS
+.TP
+.BR \-\-packages_file =\fIPKG_PATH\fR
+Set the path to the packages file.
+On most systems, this is /var/lib/dpkg/available.
+.TP
+.BR \-\-installed_file =\fISTATUSFILE_PATH\fR
+Set the path to the status file.
+On most systems, this is /var/lib/dpkg/status.
+.TP
+.BR \-\-codename =\fIDEBIAN_CODENAME\fR
+Set the debian codename in use.
+This defaults to buster.
+.TP
+.BR \-\-arch =\fIARCH\fR
+Set the Architecture in use.
+This defaults to amd64.
+.TP
+.BR \-\-addr =\fIMIRROR_URL\fR
+Set the URL to the remote mirror.
+This defaults to \fIhttps://cdn-aws.deb.debian.org/debian\fR.
+
+.SH AUTHOR
+Written by twitchyliquid64.
