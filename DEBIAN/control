@@ -1,5 +1,5 @@
 Package: debdep
-Version: 0.1.0
+Version: 0.1.2
 Architecture: amd64
 Maintainer: Twitch <twitchyliquid64@ciphersink.net>
 Description: Debdep can analyze and bootstrap a new Debian system.
