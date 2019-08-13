@@ -12,6 +12,7 @@ import (
 	version "github.com/knqyf263/go-deb-version"
 )
 
+// ErrDependency describes a failure to satisfy dependency constraints.
 type ErrDependency struct {
 	DependencyPackage string
 	RequiredByPackage string
@@ -33,6 +34,7 @@ func (e ErrDependency) Error() string {
 	}
 }
 
+// OperationKind describes the kind of operation in a sequence of operations.
 type OperationKind uint8
 
 func (o OperationKind) String() string {
@@ -61,6 +63,7 @@ type Operation struct {
 	PreDep  bool
 }
 
+// PrettyWrite generates a human-friendly representation of the operation.
 func (o *Operation) PrettyWrite(w io.Writer, depth int) error {
 	for i := 0; i < depth; i++ {
 		w.Write([]byte(" "))
@@ -87,6 +90,7 @@ func (o *Operation) PrettyWrite(w io.Writer, depth int) error {
 	return nil
 }
 
+// Unroll flattens any nested operations into a linear set of operations.
 func (o *Operation) Unroll() []Operation {
 	var out []Operation
 	switch o.Kind {
@@ -110,6 +114,8 @@ type coveredDeps struct {
 	}
 }
 
+// InstallGraph computes the operations necessary to install the target, given
+// the set of already-installed targets.
 func (p *PackageInfo) InstallGraph(target string, installed *PackageInfo) (*Operation, error) {
 	var coveredDeps coveredDeps
 	return p.buildInstallGraph(target, &coveredDeps, installed)

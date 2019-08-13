@@ -1,3 +1,4 @@
+// Binary debdep can query the package graph and download packages.
 package main
 
 import (
@@ -19,15 +20,16 @@ var (
 
 func main() {
 	flag.Parse()
-	debdep.SetBaseURL(*fetchBase)
-	debdep.SetCodename(*codename)
-	debdep.SetArch(*arch)
+	conf := debdep.DefaultResolverConfig
+	conf.BaseURL = *fetchBase
+	conf.Codename = *codename
+	conf.Arch.Arch = *arch
 
 	var packages *debdep.PackageInfo
 	var err error
 	installed := &debdep.PackageInfo{}
 	if *installedFromFile != "" {
-		installed, err = debdep.LoadPackageInfo(*installedFromFile, true)
+		installed, err = debdep.LoadPackageInfo(conf, *installedFromFile, true)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading installed packages: %v\n", err)
 			os.Exit(1)
@@ -35,9 +37,9 @@ func main() {
 	}
 
 	if *pkgsFromFile == "" {
-		packages, err = debdep.Packages(true)
+		packages, err = debdep.Packages(conf, true)
 	} else {
-		packages, err = debdep.LoadPackageInfo(*pkgsFromFile, true)
+		packages, err = debdep.LoadPackageInfo(conf, *pkgsFromFile, true)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading packages: %v\n", err)
@@ -56,10 +58,10 @@ func main() {
 		bootstrapSequenceCmd(packages, installed, flag.Arg(1))
 
 	case "check-dist":
-		checkDistCmd()
+		checkDistCmd(conf)
 
 	case "download-pkg-info":
-		downloadPackageInfo(flag.Arg(1))
+		downloadPackageInfo(conf, flag.Arg(1))
 
 	case "download-priority-deps":
 		downloadPriorityDeps(packages, installed, flag.Arg(1), flag.Arg(2))
@@ -74,13 +76,13 @@ func main() {
 	}
 }
 
-func downloadPackageInfo(path string) {
+func downloadPackageInfo(conf debdep.ResolverConfig, path string) {
 	if flag.NArg() < 2 {
 		fmt.Fprintf(os.Stderr, "USAGE: %s download-pkg-info <output-path>\n", os.Args[0])
 		os.Exit(1)
 	}
 
-	r, err := debdep.RepositoryPackagesReader(true)
+	r, err := debdep.RepositoryPackagesReader(conf, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -151,8 +153,8 @@ func bootstrapSequenceCmd(pkgs, installed *debdep.PackageInfo, pkgName string) {
 	}
 }
 
-func checkDistCmd() {
-	err := debdep.CheckReleaseStatus()
+func checkDistCmd(conf debdep.ResolverConfig) {
+	err := debdep.CheckReleaseStatus(conf)
 	if err != nil {
 		if relData, ok := err.(debdep.ReleaseInconsistency); ok {
 			fmt.Printf("Configured debian state is inconsistent with the repositories!\n")

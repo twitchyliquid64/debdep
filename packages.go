@@ -15,40 +15,52 @@ import (
 	version "github.com/knqyf263/go-deb-version"
 )
 
+// Arch describes an OS & Architecture pair.
+type Arch struct {
+	OS, Arch string
+}
+
+func (a Arch) String() string {
+	switch {
+	case a.OS == "" && a.Arch == "":
+		return "any"
+	case a.OS != "" && a.Arch == "":
+		return a.OS + "-any"
+	case a.OS == "" && a.Arch != "":
+		return "any-" + a.Arch
+	default:
+		return a.OS + "-" + a.Arch
+	}
+}
+
+// ResolverConfig describes configuration for dependency resolution
+// and download operations.
+type ResolverConfig struct {
+	Codename     string
+	Distribution string
+	Component    string
+	Arch         Arch
+	BaseURL      string
+}
+
 var (
-	codename     = "buster"
-	distribution = "testing" // Also, stable, unstable.
-	component    = "main"    // Also, non-free, contrib etc.
-	arch         = "amd64"
-	fetchBase    = "https://cdn-aws.deb.debian.org/debian"
+	DefaultResolverConfig = ResolverConfig{
+		Codename:     "buster",
+		Distribution: "stable",
+		Component:    "main",
+		Arch: Arch{
+			Arch: "amd64",
+		},
+		BaseURL: "https://cdn-aws.deb.debian.org/debian",
+	}
 )
 
-func SetCodename(in string) {
-	codename = in
-}
-
-func SetDistribution(in string) {
-	distribution = in
-}
-
-func SetComponent(in string) {
-	component = in
-}
-
-func SetArch(in string) {
-	arch = in
-}
-
-func SetBaseURL(in string) {
-	fetchBase = in
-}
-
-func url(isBinary bool) string {
+func url(c ResolverConfig, isBinary bool) string {
 	src := "source-"
 	if isBinary {
 		src = "binary-"
 	}
-	return fetchBase + "/dists/" + codename + "/" + component + "/" + src + arch
+	return c.BaseURL + "/dists/" + c.Codename + "/" + c.Component + "/" + src + c.Arch.String()
 }
 
 // ReleaseInconsistency is returned by CheckReleaseStatus if the settings for distribution/component/arch
@@ -84,10 +96,10 @@ func (r ReleaseInconsistency) Error() string {
 // CheckReleaseStatus returns an error if it could not connect to the repository,
 // or if the repository metadata was inconsistent with settings for
 // the distribution/arch/component etc.
-func CheckReleaseStatus() error {
+func CheckReleaseStatus(c ResolverConfig) error {
 	var out ReleaseInconsistency
 
-	req, err := http.Get(url(true) + "/Release")
+	req, err := http.Get(url(c, true) + "/Release")
 	if err != nil {
 		return err
 	}
@@ -108,21 +120,21 @@ func CheckReleaseStatus() error {
 
 		switch spl[0] {
 		case "Archive":
-			if spl[1] != distribution {
+			if spl[1] != c.Distribution {
 				out.dirty = true
-				out.WantDistro = distribution
+				out.WantDistro = c.Distribution
 				out.GotDistro = spl[1]
 			}
 		case "Component":
-			if spl[1] != component {
+			if spl[1] != c.Component {
 				out.dirty = true
-				out.WantComponent = component
+				out.WantComponent = c.Component
 				out.GotComponent = spl[1]
 			}
 		case "Architecture":
-			if spl[1] != arch {
+			if spl[1] != c.Arch.String() {
 				out.dirty = true
-				out.WantArch = arch
+				out.WantArch = c.Arch.String()
 				out.GotArch = spl[1]
 			}
 		case "Origin", "Label", "Acquire-By-Hash":
@@ -138,6 +150,7 @@ func CheckReleaseStatus() error {
 
 // PackageInfo keeps track of package information.
 type PackageInfo struct {
+	Config          ResolverConfig
 	BinaryPackages  bool
 	Packages        map[string]map[version.Version]*deb.Paragraph
 	virtualPackages map[string][]*deb.Paragraph
@@ -213,11 +226,11 @@ func (p *PackageInfo) FetchPath(pkg string, version version.Version) (string, er
 	if !ok {
 		return "", os.ErrNotExist
 	}
-	return fetchBase + "/" + s.Values["Filename"], nil
+	return p.Config.BaseURL + "/" + s.Values["Filename"], nil
 }
 
 // readPackages consumes package info from the given reader.
-func readPackages(r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
+func readPackages(c ResolverConfig, r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
 	packages := make(map[string]map[version.Version]*deb.Paragraph)
 	virtualPackages := make(map[string][]*deb.Paragraph)
 	d := deb.NewDecoder(r)
@@ -237,6 +250,7 @@ func readPackages(r io.Reader, isBinaryPackages bool) (*PackageInfo, error) {
 		}
 	}
 	return &PackageInfo{
+		Config:          c,
 		BinaryPackages:  isBinaryPackages,
 		Packages:        packages,
 		virtualPackages: virtualPackages,
@@ -260,20 +274,20 @@ func pkgInfoAppend(p *deb.Paragraph, packages map[string]map[version.Version]*de
 }
 
 // LoadPackageInfo reads a file detailing packages from disk.
-func LoadPackageInfo(path string, isBinaryPackages bool) (*PackageInfo, error) {
+func LoadPackageInfo(c ResolverConfig, path string, isBinaryPackages bool) (*PackageInfo, error) {
 	r, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
 
-	return readPackages(r, isBinaryPackages)
+	return readPackages(c, r, isBinaryPackages)
 }
 
 // RepositoryPackagesReader returns a reader for package information from the
 // configured remote repository.
-func RepositoryPackagesReader(binary bool) (io.ReadCloser, error) {
-	req, err := http.Get(url(binary) + "/Packages.gz")
+func RepositoryPackagesReader(c ResolverConfig, binary bool) (io.ReadCloser, error) {
+	req, err := http.Get(url(c, binary) + "/Packages.gz")
 	if err != nil {
 		return nil, err
 	}
@@ -328,11 +342,11 @@ func RepositoryPackagesReader(binary bool) (io.ReadCloser, error) {
 
 // Packages returns information about packages available in the
 // remote repository.
-func Packages(binary bool) (*PackageInfo, error) {
-	r, err := RepositoryPackagesReader(binary)
+func Packages(c ResolverConfig, binary bool) (*PackageInfo, error) {
+	r, err := RepositoryPackagesReader(c, binary)
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
-	return readPackages(r, binary)
+	return readPackages(c, r, binary)
 }
