@@ -15,31 +15,13 @@ import (
 	version "github.com/knqyf263/go-deb-version"
 )
 
-// Arch describes an OS & Architecture pair.
-type Arch struct {
-	OS, Arch string
-}
-
-func (a Arch) String() string {
-	switch {
-	case a.OS == "" && a.Arch == "":
-		return "any"
-	case a.OS != "" && a.Arch == "":
-		return a.OS + "-any"
-	case a.OS == "" && a.Arch != "":
-		return "any-" + a.Arch
-	default:
-		return a.OS + "-" + a.Arch
-	}
-}
-
 // ResolverConfig describes configuration for dependency resolution
 // and download operations.
 type ResolverConfig struct {
 	Codename     string
 	Distribution string
 	Component    string
-	Arch         Arch
+	Arch         deb.Arch
 	BaseURL      string
 }
 
@@ -48,7 +30,7 @@ var (
 		Codename:     "buster",
 		Distribution: "stable",
 		Component:    "main",
-		Arch: Arch{
+		Arch: deb.Arch{
 			Arch: "amd64",
 		},
 		BaseURL: "https://cdn-aws.deb.debian.org/debian",
@@ -195,7 +177,7 @@ func (p *PackageInfo) HasPackage(req deb.Requirement) (bool, error) {
 	if req.VersionConstraint == nil {
 		return true, nil
 	} else {
-		if _, err := p.FindWithVersionConstraint(req.Package, req.VersionConstraint); err != nil {
+		if _, err := p.FindWithVersionConstraint(req); err != nil {
 			if err == os.ErrNotExist {
 				return false, nil
 			}

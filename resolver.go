@@ -212,7 +212,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 		var selected *deb.Paragraph
 		// TODO: Decompose into its own function.
 		if req.VersionConstraint == nil { // No version relationship, lets use the latest.
-			latest, err := p.FindLatest(req.Package)
+			latest, err := p.FindLatest(req.Package) //TODO: filter on arch?
 			if err != nil {
 				if err == os.ErrNotExist {
 					virtualCandidates, err := p.FindProvides(req.Package)
@@ -233,7 +233,7 @@ func (p *PackageInfo) buildInstallGraphRequirement(coveredDeps *coveredDeps, ins
 				selected = latest
 			}
 		} else {
-			pkg, err := p.FindWithVersionConstraint(req.Package, req.VersionConstraint)
+			pkg, err := p.FindWithVersionConstraint(req)
 			if err != nil {
 				if err == os.ErrNotExist {
 					return nil, ErrDependency{
@@ -346,6 +346,27 @@ func (p *PackageInfo) FindAll(target string) (map[version.Version]*deb.Paragraph
 	return pkgs, nil
 }
 
+func filterCompatibleArch(pkgs map[version.Version]*deb.Paragraph, archSpec deb.Arch) map[version.Version]*deb.Paragraph {
+	out := make(map[version.Version]*deb.Paragraph, len(pkgs))
+	for v, p := range pkgs {
+		switch {
+		case archSpec.Arch == "" && !archSpec.Any: // nothing specified, everything permitted.
+			out[v] = p
+		case archSpec.Arch != "" && !archSpec.Any: // Arch specified, must match or be irrelevant.
+			if p.Arch() == "all" || p.Arch() == archSpec.Arch || p.ForeignDepSatisfiable() {
+				out[v] = p
+			}
+		case archSpec.Any:
+			// Relying package specified any arch can satisfy & the dependency agrees.
+			if p.MultiarchAllowed() {
+				out[v] = p
+			}
+		}
+	}
+
+	return out
+}
+
 // FindLatest returns the latest version of the package with the given name.
 func (p *PackageInfo) FindLatest(target string) (*deb.Paragraph, error) {
 	pkgs, err := p.FindAll(target)
@@ -378,12 +399,14 @@ func (p *PackageInfo) FindProvides(target string) ([]*deb.Paragraph, error) {
 
 // FindWithVersionConstraint tries to find a version of the package that satisfies the
 // given version constraint.
-func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.VersionConstraint) (*deb.Paragraph, error) {
-	pkgs, err := p.FindAll(target)
+func (p *PackageInfo) FindWithVersionConstraint(req deb.Requirement) (*deb.Paragraph, error) {
+	pkgs, err := p.FindAll(req.Package)
 	if err != nil {
 		return nil, err
 	}
-	v, err := version.NewVersion(constraint.Version)
+	pkgs = filterCompatibleArch(pkgs, req.ArchConstraint)
+
+	v, err := version.NewVersion(req.VersionConstraint.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +425,7 @@ func (p *PackageInfo) FindWithVersionConstraint(target string, constraint *deb.V
 		return vers
 	}
 
-	switch constraint.ConstraintRelation {
+	switch req.VersionConstraint.ConstraintRelation {
 	case deb.ConstraintEquals:
 		pkg, ok := pkgs[v]
 		if !ok {

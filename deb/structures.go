@@ -35,7 +35,7 @@ func (p *Paragraph) BinaryDepends() (Requirement, error) {
 	if !ok {
 		return Requirement{}, nil
 	}
-	return ParsePackageRelations(dep)
+	return ParsePackageRelations(dep, p.Arch())
 }
 
 // BinaryPreDepends returns a requirements graph representing the binary
@@ -45,7 +45,7 @@ func (p *Paragraph) BinaryPreDepends() (Requirement, error) {
 	if !ok {
 		return Requirement{}, nil
 	}
-	return ParsePackageRelations(dep)
+	return ParsePackageRelations(dep, p.Arch())
 }
 
 // Provides returns a list of virtual packages this concrete package
@@ -53,6 +53,42 @@ func (p *Paragraph) BinaryPreDepends() (Requirement, error) {
 func (p *Paragraph) Provides() []string {
 	return strings.Split(strings.Replace(p.Values["Provides"], " ", "", -1), ",")
 }
+
+// Arch returns the architecture of the package.
+func (p *Paragraph) Arch() string {
+	return p.Values["Architecture"]
+}
+
+// ForeignDepSatisfiable returns true if the package can satisfy
+// dependencies where the relying package is of a different architecture.
+func (p *Paragraph) ForeignDepSatisfiable() bool {
+	switch {
+	case p.Values["Multi-Arch"] == "same":
+		return false
+	case p.Values["Multi-Arch"] == "no":
+		return false
+	case p.Values["Multi-Arch"] == "foreign":
+		return true
+	case p.Values["Architecture"] == "all":
+		return true
+	}
+	return false
+}
+
+// MultiarchAllowed returns true if the package has Multi-Arch == "allowed".
+func (p *Paragraph) MultiarchAllowed() bool {
+	return p.Values["Multi-Arch"] == "allowed"
+}
+
+// ArchRelation describes constraints around how a package satisfies
+// a dependency where the parent is a different architecture.
+type ArchRelation uint8
+
+// Valid ArchRelation values.
+const (
+	ArchRelationExact ArchRelation = iota
+	ArchRelationAgnostic
+)
 
 // RequirementKind disambiguates nodes in the requirements tree.
 type RequirementKind uint8
@@ -84,6 +120,7 @@ type Requirement struct {
 	// Applicable if Kind == PackageRelationRequirement
 	Package           string
 	VersionConstraint *VersionConstraint
+	ArchConstraint    Arch
 }
 
 func (r *Requirement) Equal(b *Requirement) bool {
@@ -137,4 +174,23 @@ const (
 type VersionConstraint struct {
 	ConstraintRelation ConstraintRelation
 	Version            string
+}
+
+// Arch describes an OS & Architecture pair.
+type Arch struct {
+	Any      bool
+	OS, Arch string
+}
+
+func (a Arch) String() string {
+	switch {
+	case a.OS == "" && a.Arch == "":
+		return "any"
+	case a.OS != "" && a.Arch == "":
+		return a.OS + "-any"
+	case a.OS == "" && a.Arch != "":
+		return "any-" + a.Arch
+	default:
+		return a.OS + "-" + a.Arch
+	}
 }

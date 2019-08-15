@@ -96,7 +96,7 @@ func consumeWhitespace(r *bufio.Reader) error {
 	}
 }
 
-func readPkgName(r *bufio.Reader) (string, error) {
+func readPkgSpec(r *bufio.Reader) (string, error) {
 	out := ""
 	for {
 		inRune, _, err := r.ReadRune()
@@ -108,47 +108,75 @@ func readPkgName(r *bufio.Reader) (string, error) {
 		}
 		out += string(inRune)
 	}
+
 	return "", nil
 }
 
+func parseArch(in string) (Arch, error) {
+	if in == "" {
+		return Arch{}, nil
+	}
+	if in == "any" {
+		return Arch{Any: true}, nil
+	}
+	if idx := strings.Index(in, "-"); idx != -1 {
+		return Arch{
+			OS:   in[:idx],
+			Arch: in[idx+1:],
+		}, nil
+	}
+	return Arch{}, nil
+}
+
 // parseRelation parses a single package name & optional version constraint.
-func parseRelation(r *bufio.Reader) (string, *VersionConstraint, error) {
+func parseRelation(r *bufio.Reader) (string, *VersionConstraint, *Arch, error) {
 	if err := consumeWhitespace(r); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
-	name, err := readPkgName(r)
+	spec, err := readPkgSpec(r)
 	if err != nil && err != io.EOF {
-		return name, nil, err
+		return spec, nil, nil, err
 	}
+
+	var arch Arch
+	name := spec
+	archDelim := strings.Index(spec, ":")
+	if archDelim != -1 {
+		if arch, err = parseArch(spec[archDelim+1:]); err != nil {
+			return "", nil, nil, err
+		}
+		name = spec[:archDelim]
+	}
+
 	consumeWhitespace(r)
 	next, _, err := r.ReadRune()
 	if err != nil && err != io.EOF {
-		return name, nil, err
+		return name, nil, nil, err
 	}
 	if next != '(' {
 		r.UnreadRune()
-		return name, nil, err
+		return name, nil, &arch, err
 	}
 
 	var versionConst VersionConstraint
 	constraint, err := r.ReadString(' ')
 	if err != nil {
-		return name, nil, fmt.Errorf("error when expected ' ': %v", err)
+		return name, nil, nil, fmt.Errorf("error when expected ' ': %v", err)
 	}
 	constraint = strings.Trim(constraint, " ")
 	switch constraint {
 	case ConstraintGreaterThan, ConstraintLessThan, ConstraintEquals, ConstraintGreaterEquals, ConstraintLessThanEquals:
 		versionConst.ConstraintRelation = ConstraintRelation(constraint)
 	default:
-		return name, nil, fmt.Errorf("expected relation, got %q", constraint)
+		return name, nil, nil, fmt.Errorf("expected relation, got %q", constraint)
 	}
 
 	vers, err := r.ReadString(')')
 	if err != nil {
-		return name, nil, fmt.Errorf("error when expected ')': %v", err)
+		return name, nil, nil, fmt.Errorf("error when expected ')': %v", err)
 	}
 	versionConst.Version = strings.Trim(vers, ") ")
-	return name, &versionConst, nil
+	return name, &versionConst, &arch, nil
 }
 
 // parseRelationSpec parses a group (between commas) of relation constraints.
@@ -160,15 +188,16 @@ func parseRelationSpec(r *bufio.Reader) (out Requirement, err error) {
 	}()
 
 	for {
-		name, versionConst, err := parseRelation(r)
+		name, versionConst, arch, err := parseRelation(r)
 		if err != nil {
 			if err != io.EOF || name == "" {
 				return out, err
 			}
 		}
 		spec := Requirement{
-			Kind:    PackageRelationRequirement,
-			Package: name,
+			Kind:           PackageRelationRequirement,
+			Package:        name,
+			ArchConstraint: *arch,
 		}
 		if versionConst != nil {
 			spec.VersionConstraint = versionConst
@@ -211,7 +240,11 @@ func parseRelationSpec(r *bufio.Reader) (out Requirement, err error) {
 
 // ParsePackageRelations takes a string of package/version contraints, and parses
 // them into a tree of Requirement structures.
-func ParsePackageRelations(in string) (out Requirement, err error) {
+func ParsePackageRelations(in, arch string) (out Requirement, err error) {
+	if arch == "all" || arch == "any" {
+		arch = ""
+	}
+
 	defer func() {
 		if (out.Kind == AndCompositeRequirement || out.Kind == OrCompositeRequirement) && len(out.Children) == 1 {
 			out = out.Children[0]
@@ -221,6 +254,9 @@ func ParsePackageRelations(in string) (out Requirement, err error) {
 	r := bufio.NewReader(strings.NewReader(in))
 	out = Requirement{
 		Kind: AndCompositeRequirement,
+		ArchConstraint: Arch{
+			Arch: arch,
+		},
 	}
 
 	for {
