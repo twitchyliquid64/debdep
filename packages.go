@@ -42,7 +42,7 @@ func url(c ResolverConfig, isBinary bool) string {
 	if isBinary {
 		src = "binary-"
 	}
-	return c.BaseURL + "/dists/" + c.Codename + "/" + c.Component + "/" + src + c.Arch.String()
+	return c.BaseURL + "/dists/" + c.Codename + "/" + c.Component + "/" + src + c.Arch.Arch
 }
 
 // ReleaseInconsistency is returned by CheckReleaseStatus if the settings for distribution/component/arch
