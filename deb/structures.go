@@ -28,6 +28,16 @@ func (p *Paragraph) Version() (version.Version, error) {
 	return version.NewVersion(v)
 }
 
+// BinaryBreaks returns a requirements graph representing the packages
+// which this packages will break.
+func (p *Paragraph) BinaryBreaks() (Requirement, error) {
+	dep, ok := p.Values["Breaks"]
+	if !ok {
+		return Requirement{}, nil
+	}
+	return ParsePackageRelations(dep, p.Arch())
+}
+
 // BinaryDepends returns a requirements graph representing the binary
 // dependencies of the package.
 func (p *Paragraph) BinaryDepends() (Requirement, error) {
