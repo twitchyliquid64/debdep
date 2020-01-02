@@ -14,12 +14,13 @@ import (
 
 // Deb represents a parsed debian package.
 type Deb struct {
-	files map[string]DataFile
+	files        map[string]DataFile
+	orderedFiles []DataFile
 }
 
 // Files returns all the data files within the archive.
-func (d *Deb) Files() map[string]DataFile {
-	return d.files
+func (d *Deb) Files() []DataFile {
+	return d.orderedFiles
 }
 
 func (d *Deb) loadFiles(tr *tar.Reader) error {
@@ -35,10 +36,13 @@ func (d *Deb) loadFiles(tr *tar.Reader) error {
 		if _, err := io.Copy(&b, tr); err != nil {
 			return fmt.Errorf("reading %q: %v", hdr.Name, err)
 		}
-		d.files[hdr.Name] = DataFile{
+
+		df := DataFile{
 			Hdr:  *hdr,
 			Data: b.Bytes(),
 		}
+		d.files[hdr.Name] = df
+		d.orderedFiles = append(d.orderedFiles, df)
 	}
 	return nil
 }
